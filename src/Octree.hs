@@ -1,6 +1,11 @@
 module Octree where
 
+---------------------------------------------------------
+
+import qualified Data.List as L
 import Vec3D
+
+---------------------------------------------------------
 
 data Octree a = Node
                   { center :: Vec3D
@@ -16,8 +21,12 @@ data Octree a = Node
 
 data Octant = FTR | FTL | FBR | FBL | BTR | BTL | BBR | BBL deriving (Show, Eq, Ord, Enum)
 
+---------------------------------------------------------
+
 emptyOctree :: Vec3D -> Float -> Octree a
 emptyOctree c l = Leaf c l []
+
+---------------------------------------------------------
 
 --octreeMap :: (a -> b) -> Octree a -> Octree b
 --octreeMap func (Node cen len a b c d e f g h) = Node cen len j k l m n o p q
@@ -41,6 +50,16 @@ octreeFold func i (Node _ _ a b c d e f g h) = octreeFold func p h
           o = octreeFold func n f
           p = octreeFold func o g
 octreeFold func i (Leaf _ _ objs) = foldl (\acc x -> func acc $ fst x) i objs
+
+---------------------------------------------------------
+
+prettyPrint :: (Show a) => Octree a -> String
+prettyPrint (Node cen l a b c d e f g h) = "Node {\n\tcenter: " ++ (show cen) ++ "\n\tlength: " ++ (show l) ++ "\n" ++
+    (concat $ L.intersperse "\n" $ map prettyPrint [a, b, c, d, e, f, g, h]) ++ "\n}"
+prettyPrint (Leaf cen l objs) = "Leaf {\n\tcenter: " ++ (show cen) ++ "\n\tlength: " ++ (show l) ++ "\n\t" ++
+    (concat $ L.intersperse "\n\t" $ map show objs) ++ "\n}"
+
+---------------------------------------------------------
 
 getOctant :: Vec3D -> Vec3D -> Octant
 getOctant cen pos = toEnum $ (fromEnum right) + (2 * fromEnum top) + (4 * fromEnum front)
@@ -106,5 +125,5 @@ splitWith :: Octree a -> (Octree a -> Bool) -> Octree a
 splitWith (Node cen len i j k l m n o p) f = Node cen len (s i) (s j) (s k) (s l) (s m) (s n) (s o) (s p)
     where s tree = splitWith tree f
 splitWith tree func 
-    | func tree = splitTree tree
+    | func tree = splitWith (splitTree tree) func
     | otherwise = tree
