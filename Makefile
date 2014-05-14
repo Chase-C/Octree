@@ -11,4 +11,4 @@ ${EXEC} : ${SOURCES}
 	${CC} ${FLAGS} -o $@ $^
 
 clean :
-	- rm ${EXEC}
+	- rm ${EXEC}.exe

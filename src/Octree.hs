@@ -44,9 +44,9 @@ octreeFold func i (Leaf _ _ objs) = foldl (\acc x -> func acc $ fst x) i objs
 
 getOctant :: Vec3D -> Vec3D -> Octant
 getOctant cen pos = toEnum $ (fromEnum right) + (2 * fromEnum top) + (4 * fromEnum front)
-    where front = vZ pos > vZ cen
-          top   = vY pos > vY cen
-          right = vX pos > vX cen
+    where front = vZ pos < vZ cen
+          top   = vY pos < vY cen
+          right = vX pos < vX cen
 
 getSubtree :: Octree a -> Octant -> Octree a
 getSubtree (Node _ _ a b c d e f g h) octant =
@@ -61,12 +61,26 @@ getSubtree (Node _ _ a b c d e f g h) octant =
       BBL -> h
 getSubtree tree _ = tree
 
+replaceSubtree :: Octree a -> Octant -> Octree a -> Octree a
+replaceSubtree (Node cen l a b c d e f g h) octant subtree =
+    case octant of
+      FTR -> Node cen l subtree b c d e f g h
+      FTL -> Node cen l a subtree c d e f g h
+      FBR -> Node cen l a b subtree d e f g h
+      FBL -> Node cen l a b c subtree e f g h                                
+      BTR -> Node cen l a b c d subtree f g h
+      BTL -> Node cen l a b c d e subtree g h
+      BBR -> Node cen l a b c d e f subtree h
+      BBL -> Node cen l a b c d e f g subtree
+replaceSubtree tree _ _ = tree
+
 count :: Octree a -> Int
 count = octreeFold (\acc _ -> acc + 1) 0
 
 insert :: Octree a -> (a, Vec3D) -> Octree a
 insert (Leaf cen l xs) obj = Leaf cen l $ obj:xs
-insert node              obj = insert (getSubtree node $ getOctant (center node) (snd obj)) obj
+insert node            obj = replaceSubtree node octant $ insert (getSubtree node octant) obj
+    where octant = getOctant (center node) (snd obj)
 
 splitTree :: Octree a -> Octree a
 splitTree (Leaf c@(Vec3D (cx, cy, cz)) l objs) = foldl insert tree objs
@@ -91,5 +105,6 @@ splitTree tree = tree
 splitWith :: Octree a -> (Octree a -> Bool) -> Octree a
 splitWith (Node cen len i j k l m n o p) f = Node cen len (s i) (s j) (s k) (s l) (s m) (s n) (s o) (s p)
     where s tree = splitWith tree f
-splitWith tree func = if func tree then splitTree tree
-                                   else tree
+splitWith tree func 
+    | func tree = splitTree tree
+    | otherwise = tree
