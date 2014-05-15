@@ -127,3 +127,8 @@ splitWith (Node cen len i j k l m n o p) f = Node cen len (s i) (s j) (s k) (s l
 splitWith tree func 
     | func tree = splitWith (splitTree tree) func
     | otherwise = tree
+
+getNearObjects :: Octree a -> Vec3D -> [a]
+getNearObjects (Leaf _ _ objs) _ = map fst objs
+getNearObjects node pos          = getNearObjects subtree pos
+    where subtree = getSubtree node $ getOctant (center node) pos

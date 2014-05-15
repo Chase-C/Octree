@@ -34,4 +34,7 @@ main = do
         s = O.insert r (16, Vec3D (6, 6, 2))
         t = O.insert s (17, Vec3D (2, 6, 6))
     putStrLn $ O.prettyPrint t
-    putStrLn $ O.prettyPrint $ O.splitWith t ((>8) . O.count)
+
+    let u = O.splitWith t ((>8) . O.count)
+    putStrLn $ O.prettyPrint u
+    putStrLn $ show $ O.getNearObjects u (Vec3D (6, 6, 6))
