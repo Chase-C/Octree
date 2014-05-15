@@ -101,6 +101,9 @@ insert (Leaf cen l xs) obj = Leaf cen l $ obj:xs
 insert node            obj = replaceSubtree node octant $ insert (getSubtree node octant) obj
     where octant = getOctant (center node) (snd obj)
 
+insertList :: Octree a -> [(a, Vec3D)] -> Octree a
+insertList = fold insert
+
 splitTree :: Octree a -> Octree a
 splitTree (Leaf c@(Vec3D (cx, cy, cz)) l objs) = foldl insert tree objs
     where tree = Node
