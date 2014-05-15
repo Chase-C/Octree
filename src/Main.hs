@@ -38,3 +38,5 @@ main = do
     let u = O.splitWith t ((>8) . O.count)
     putStrLn $ O.prettyPrint u
     putStrLn $ show $ O.getNearObjects u (Vec3D (6, 6, 6))
+    putStrLn ""
+    putStrLn $ show $ O.flattenTree u

@@ -14,7 +14,7 @@ data Octree a = Node
                   } -- front, back, top, bottom, right, left
               | Leaf
                   { center  :: Vec3D
-                  , len  :: Float
+                  , len     :: Float
                   , objects :: [(a, Vec3D)]
                   }
                 deriving (Show)
@@ -93,6 +93,9 @@ replaceSubtree (Node cen l a b c d e f g h) octant subtree =
       BBL -> Node cen l a b c d e f g subtree
 replaceSubtree tree _ _ = tree
 
+flattenTree :: Octree a -> [a]
+flattenTree tree = octreeFold (\xs obj -> obj:xs) [] tree
+
 count :: Octree a -> Int
 count = octreeFold (\acc _ -> acc + 1) 0
 
@@ -102,7 +105,7 @@ insert node            obj = replaceSubtree node octant $ insert (getSubtree nod
     where octant = getOctant (center node) (snd obj)
 
 insertList :: Octree a -> [(a, Vec3D)] -> Octree a
-insertList = fold insert
+insertList = foldl insert
 
 splitTree :: Octree a -> Octree a
 splitTree (Leaf c@(Vec3D (cx, cy, cz)) l objs) = foldl insert tree objs
