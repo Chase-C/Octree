@@ -2,7 +2,11 @@ module Octree where
 
 ---------------------------------------------------------
 
+import Control.Applicative
+import Data.Bits
+
 import qualified Data.List as L
+
 import Vec3D
 
 ---------------------------------------------------------
@@ -139,17 +143,35 @@ getNearObjects (Leaf _ _ objs) _ = map fst objs
 getNearObjects node pos          = getNearObjects subtree pos
     where subtree = getSubtree node $ getOctant (center node) pos
 
-getRadiusObjects' :: Octree a -> [Vec3D] -> Float -> [a]
-getRadiusObjects' (Leaf _ _ objs) (p:_) r = map fst $ filter (\obj -> (r * r) > (vSqLen $ vSub p $ snd obj)) objs
-getRadiusObjects' node pts r              = concat $ map (\t -> getRadiusObjects' t pts r) subtrees
-    where subtrees = map (getSubtree node) $ if r > len node
-                                               then map toEnum [0..7]
-                                               else L.nub $ map (getOctant (center node)) pts
+--getRadiusObjects' :: Octree a -> [Vec3D] -> Float -> [a]
+--getRadiusObjects' (Leaf _ _ objs) (p:_) r = map fst $ filter (\obj -> (r * r) > (vSqLen $ vSub p $ snd obj)) objs
+--getRadiusObjects' node pts r              = concat $ map (\t -> getRadiusObjects' t pts r) subtrees
+--    where subtrees = map (getSubtree node) $ if r > len node
+--                                               then map toEnum [0..7]
+--                                               else L.nub $ map (getOctant (center node)) pts
+--
+--getRadiusObjects :: Octree a -> Vec3D -> Float -> [a]
+--getRadiusObjects tree pos r = getRadiusObjects' tree pts r
+--    where pts     = pos:foldl (\ps off -> (vAdd pos off):(vSub pos off):ps) [] offsets
+--          offsets = [v  (r,0,0),  v  ( 0,r,0), v  (0,0, r), vs (1, 1,0), vs ( 0,1,1), vs (1,0, 1),
+--                     vs (1,-1,0), vs (0,1,-1), vs (1,0,-1), vs (1, 1,1), vs (-1,1,1), vs (1,1,-1), vs (1,-1,1)]
+--          v       = Vec3D
+--          vs pt   = vScale (v pt) r
+
+xOppOctant, yOppOctant, zOppOctant :: Octant -> Octant
+xOppOctant octant = toEnum $ xor (fromEnum octant) 1
+yOppOctant octant = toEnum $ xor (fromEnum octant) 2
+zOppOctant octant = toEnum $ xor (fromEnum octant) 4
 
 getRadiusObjects :: Octree a -> Vec3D -> Float -> [a]
-getRadiusObjects tree pos r = getRadiusObjects' tree pts r
-    where pts     = pos:foldl (\ps off -> (vAdd pos off):(vSub pos off):ps) [] offsets
-          offsets = [v  (r,0,0),  v  ( 0,r,0), v  (0,0, r), vs (1, 1,0), vs ( 0,1,1), vs (1,0, 1),
-                     vs (1,-1,0), vs (0,1,-1), vs (1,0,-1), vs (1, 1,1), vs (-1,1,1), vs (1,1,-1), vs (1,-1,1)]
-          v       = Vec3D
-          vs pt   = vScale (v pt) r
+getRadiusObjects (Leaf _ l objs) pos r
+    | r > l     = map fst objs
+    | otherwise = map fst $ filter (\obj -> (r * r) > (vSqLen $ vSub pos $ snd obj)) objs
+getRadiusObjects node pos r = concat $ map (\o -> getRadiusObjects (getSubtree node o) pos r) others
+    where octant = getOctant (center node) pos
+          others = if r > len node
+                     then [x . y . z | z <- zList, y <- yList, x <- xList] <*> [octant]
+                     else map toEnum [0..7] :: [Octant]
+          xList  = id : if r > abs ((vX pos) - (vX $ center node)) then [xOppOctant] else []
+          yList  = id : if r > abs ((vY pos) - (vY $ center node)) then [yOppOctant] else []
+          zList  = id : if r > abs ((vZ pos) - (vZ $ center node)) then [zOppOctant] else []

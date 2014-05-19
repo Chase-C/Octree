@@ -31,4 +31,4 @@ main = do
     let r = O.splitWith q ((>8) . O.count)
     putStrLn $ O.prettyPrint r
     putStrLn $ show $ O.getNearObjects   r (Vec3D (8, 8, 8))
-    putStrLn $ show $ O.getRadiusObjects r (Vec3D (0, 0, 0)) 9
+    putStrLn $ show $ O.getRadiusObjects r (Vec3D (0, 0, 0)) 6
