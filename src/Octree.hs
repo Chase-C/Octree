@@ -170,8 +170,8 @@ getRadiusObjects (Leaf _ l objs) pos r
 getRadiusObjects node pos r = concat $ map (\o -> getRadiusObjects (getSubtree node o) pos r) others
     where octant = getOctant (center node) pos
           others = if r > len node
-                     then [x . y . z | z <- zList, y <- yList, x <- xList] <*> [octant]
-                     else map toEnum [0..7] :: [Octant]
+                     then map toEnum [0..7] :: [Octant]
+                     else [x . y . z | z <- zList, y <- yList, x <- xList] <*> [octant]
           xList  = id : if r > abs ((vX pos) - (vX $ center node)) then [xOppOctant] else []
           yList  = id : if r > abs ((vY pos) - (vY $ center node)) then [yOppOctant] else []
           zList  = id : if r > abs ((vZ pos) - (vZ $ center node)) then [zOppOctant] else []
