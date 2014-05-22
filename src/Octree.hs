@@ -148,3 +148,10 @@ getRadiusObjects node pos r = concat $ map (\o -> getRadiusObjects (getSubtree n
           xList  = id : if r > abs ((vX pos) - (vX $ center node)) then [xOppOctant] else []
           yList  = id : if r > abs ((vY pos) - (vY $ center node)) then [yOppOctant] else []
           zList  = id : if r > abs ((vZ pos) - (vZ $ center node)) then [zOppOctant] else []
+
+kNearestNeighbors' :: Octree a -> Vec3D -> [(a, Float)]
+kNearestNeighbors' (Leaf _ _ objs) k = take k $ map fst $ L.sortBy sortFunc objs
+    where sortFunc = (\(_, a) (_, b) -> (vSqLen $ vSub a pos) `compare` (vSqLen $ vSub b pos))
+kNearestNeighbors' node k =
+    where 
+          sortFunc = (\(_, a) (_, b) -> (vSqLen $ vSub a pos) `compare` (vSqLen $ vSub b pos))
