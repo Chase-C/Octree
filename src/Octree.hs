@@ -13,7 +13,7 @@ import Vec3D
 
 data Octree a = Node
                   { center :: Vec3D
-                  , len :: Float
+                  , len    :: Float
                   , ftr, ftl, fbr, fbl, btr, btl, bbr, bbl :: Octree a
                   } -- front, back, top, bottom, right, left
               | Leaf
@@ -42,6 +42,17 @@ octreeFold func i (Node _ _ a b c d e f g h) = octreeFold func p h
           o = octreeFold func n f
           p = octreeFold func o g
 octreeFold func i (Leaf _ _ objs) = foldl (\acc x -> func acc $ fst x) i objs
+
+octreeFold' :: (a -> (b, Vec3D) -> a) -> a -> Octree b -> a
+octreeFold' func i (Node _ _ a b c d e f g h) = octreeFold' func p h
+    where j = octreeFold' func i a
+          k = octreeFold' func j b
+          l = octreeFold' func k c
+          m = octreeFold' func l d
+          n = octreeFold' func m e
+          o = octreeFold' func n f
+          p = octreeFold' func o g
+octreeFold' func i (Leaf _ _ objs) = foldl (\acc x -> func acc x) i objs
 
 ---------------------------------------------------------
 
@@ -85,8 +96,8 @@ replaceSubtree (Node cen l a b c d e f g h) octant subtree =
       BBL -> Node cen l a b c d e f g subtree
 replaceSubtree tree _ _ = tree
 
-flattenTree :: Octree a -> [a]
-flattenTree tree = octreeFold (\xs obj -> obj:xs) [] tree
+flattenTree :: Octree a -> [(a, Vec3D)]
+flattenTree tree = octreeFold' (\xs obj -> obj:xs) [] tree
 
 count :: Octree a -> Int
 count = octreeFold (\acc _ -> acc + 1) 0
@@ -137,23 +148,21 @@ yOppOctant octant = toEnum $ xor (fromEnum octant) 2
 zOppOctant octant = toEnum $ xor (fromEnum octant) 4
 
 getRadiusObjects :: Octree a -> Vec3D -> Float -> [a]
-getRadiusObjects (Leaf _ l objs) pos r
-    | r > l     = map fst objs
-    | otherwise = map fst $ filter (\obj -> (r * r) > (vSqLen $ vSub pos $ snd obj)) objs
+getRadiusObjects (Leaf _ l objs) pos r = map fst $ filter (\obj -> (r * r) > (vSqLen $ vSub pos $ snd obj)) objs
 getRadiusObjects node pos r = concat . (map (\t -> getRadiusObjects t pos r)) $ intersectingSubtrees node pos r
 
 -- Return True iff the sphere around the given position exceeds the bounds of
 -- the given Octree.
-outsideBounds :: Octree a -> Vec3D -> Float -> Bool
-outsideBounds tree pos rad = lX && lY && lZ && uX && uY && uZ
+inBounds :: Octree a -> Vec3D -> Float -> Bool
+inBounds tree pos rad = lX && lY && lZ && uX && uY && uZ
     where Vec3D (x, y, z) = vSub pos $ center tree
-          l  = len tree
-          lX = 0 < x - rad
-          lY = 0 < y - rad
-          lZ = 0 < z - rad
-          uX = l > x + rad
-          uY = l > y + rad
-          uZ = l > z + rad
+          hl = len tree / 2
+          lX = -hl < x - rad
+          lY = -hl < y - rad
+          lZ = -hl < z - rad
+          uX =  hl > x + rad
+          uY =  hl > y + rad
+          uZ =  hl > z + rad
 
 -- Return a list of the subtrees intersecting with the given bounding sphere
 intersectingSubtrees :: Octree a -> Vec3D -> Float -> [Octree a]
@@ -163,9 +172,9 @@ intersectingSubtrees node pos rad = map (getSubtree node) octants
           octants = if rad > (len node)
                       then map toEnum [0..7] :: [Octant]
                       else [x . y . z | z <- zList, y <- yList, x <- xList] <*> [octant]
-          xList = id : if rad > ((vX pos) - (vX $ center node)) then [xOppOctant] else []
-          yList = id : if rad > ((vY pos) - (vY $ center node)) then [yOppOctant] else []
-          zList = id : if rad > ((vZ pos) - (vZ $ center node)) then [zOppOctant] else []
+          xList = id : if rad > abs ((vX pos) - (vX $ center node)) then [xOppOctant] else []
+          yList = id : if rad > abs ((vY pos) - (vY $ center node)) then [yOppOctant] else []
+          zList = id : if rad > abs ((vZ pos) - (vZ $ center node)) then [zOppOctant] else []
 
 kNearestNeighbors :: Octree a -> Vec3D -> Int -> Float -> [(a, Float)]
 kNearestNeighbors (Leaf _ _ objs) pos k maxR = take k $ L.sortBy sortFunc $ filter filtFunc $ map radFunc objs
@@ -173,12 +182,15 @@ kNearestNeighbors (Leaf _ _ objs) pos k maxR = take k $ L.sortBy sortFunc $ filt
           filtFunc = (\(_, rad)        -> rad < maxR)
           radFunc  = (\(obj, vec)      -> (obj, vLen $ vSub vec pos))
 kNearestNeighbors node pos k maxR
-    | outsideBounds subtree pos topR =
-        foldl (\ns t -> let bigR = if null ns then topR else snd $ last ns
-                        in  take k $ foldl (flip $ L.insertBy sortFunc) ns $ kNearestNeighbors t pos k bigR) nearest others
-    | otherwise = nearest
-    where subtree  = getSubtree node (getOctant (center node) pos)
-          nearest  = kNearestNeighbors subtree pos k maxR
-          topR     = if null nearest then maxR else snd $ last nearest
-          others   = L.deleteBy (\t1 t2 -> center t1 == center t2) subtree $ intersectingSubtrees node pos topR
-          sortFunc = (\(_, r1) (_, r2) -> r1 `compare` r2)
+    | inBounds subtree pos topR && length nearest >= k = nearest
+    | otherwise = foldl (combineNeighbors pos k topR) nearest others
+    where subtree = getSubtree node (getOctant (center node) pos)
+          nearest = kNearestNeighbors subtree pos k maxR
+          topR    = if length nearest >= k then snd $ last nearest else maxR
+          others  = L.deleteBy (\t1 t2 -> center t1 == center t2) subtree $ intersectingSubtrees node pos topR
+
+combineNeighbors :: Vec3D -> Int -> Float -> [(a, Float)] -> Octree a -> [(a, Float)]
+combineNeighbors pos k maxR nearest tree =
+    let topR = if length nearest >= k then snd $ last nearest else maxR
+        sortFunc = (\(_, r1) (_, r2) -> r1 `compare` r2)
+    in  take k $ foldr (L.insertBy sortFunc) nearest $ kNearestNeighbors tree pos k topR
