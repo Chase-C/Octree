@@ -2,9 +2,7 @@ module Octree where
 
 ---------------------------------------------------------
 
-import Control.Applicative
 import Data.Bits
-
 import qualified Data.List as L
 
 import Vec3D
@@ -71,7 +69,7 @@ getOctant cen pos = toEnum $ (fromEnum right) + (2 * fromEnum top) + (4 * fromEn
           right = vX pos < vX cen
 
 getSubtree :: Octree a -> Octant -> Octree a
-getSubtree !(Node _ _ a b c d e f g h) !octant =
+getSubtree (Node _ _ a b c d e f g h) octant =
     case octant of
       FTR -> a
       FTL -> b
@@ -148,11 +146,12 @@ yOppOctant octant = toEnum $ xor (fromEnum octant) 2
 zOppOctant octant = toEnum $ xor (fromEnum octant) 4
 
 getRadiusObjects :: Octree a -> Vec3D -> Float -> [a]
-getRadiusObjects (Leaf _ l objs) pos r = map fst $ filter (\obj -> (r * r) > (vSqLen $ vSub pos $ snd obj)) objs
+getRadiusObjects (Leaf _ _ objs) pos r = map fst $ filter (\obj -> (r * r) > (vSqLen $ vSub pos $ snd obj)) objs
 getRadiusObjects node pos r = concat . (map (\t -> getRadiusObjects t pos r)) $ intersectingSubtrees node pos r
 
 -- Return True iff the sphere around the given position exceeds the bounds of
 -- the given Octree.
+{-# INLINE inBounds #-}
 inBounds :: Octree a -> Vec3D -> Float -> Bool
 inBounds tree pos rad = lX && lY && lZ && uX && uY && uZ
     where Vec3D (x, y, z) = vSub pos $ center tree
@@ -165,9 +164,10 @@ inBounds tree pos rad = lX && lY && lZ && uX && uY && uZ
           uZ =  hl > z + rad
 
 -- Return a list of the subtrees intersecting with the given bounding sphere
+{-# INLINE intersectingSubtrees #-}
 intersectingSubtrees :: Octree a -> Vec3D -> Float -> [Octree a]
 intersectingSubtrees l@(Leaf _ _ _) _ _ = return l
-intersectingSubtrees node p@(Vec3D (px, py, pz)) rad = map (getSubtree node) octants
+intersectingSubtrees node p@(Vec3D (px, py, pz)) rad = init $ map (getSubtree node) octants
     where octant  = getOctant c p
           octants = if rad > abs (pz - cz) then foldl (\zs o -> (zOppOctant o):o:zs) [] tmpY else tmpY
           tmpY    = if rad > abs (py - cy) then foldl (\ys o -> (yOppOctant o):o:ys) [] tmpX else tmpX
@@ -178,17 +178,18 @@ kNearestNeighbors :: Octree a -> Vec3D -> Int -> Float -> [(a, Float)]
 kNearestNeighbors (Leaf _ _ objs) pos k maxR = take k $ L.sortBy sortFunc $ filter filtFunc $ map radFunc objs
     where sortFunc (_, r1) (_, r2) = r1 `compare` r2
           filtFunc (_, rad)        = rad < maxR
-          radFunc  (!obj, !vec)    = (obj, vDist vec pos)
+          radFunc  (obj, vec)      = (obj, vDist vec pos)
 kNearestNeighbors node pos k maxR
     | inBounds subtree pos topR && length nearest >= k = nearest
     | otherwise = foldl (combineNeighbors pos k topR) nearest others
     where subtree = getSubtree node (getOctant (center node) pos)
           nearest = kNearestNeighbors subtree pos k maxR
           topR    = if length nearest >= k then snd $ last nearest else maxR
-          others  = L.deleteBy (\t1 t2 -> center t1 == center t2) subtree $ intersectingSubtrees node pos topR
+          --others  = L.deleteBy (\t1 t2 -> center t1 == center t2) subtree $ intersectingSubtrees node pos topR
+          others  = intersectingSubtrees node pos topR
 
 combineNeighbors :: Vec3D -> Int -> Float -> [(a, Float)] -> Octree a -> [(a, Float)]
-combineNeighbors !pos !k !maxR !nearest !tree =
+combineNeighbors pos k maxR nearest tree =
     let topR = if length nearest >= k then snd $ last nearest else maxR
         sortFunc (_, r1) (_, r2) = r1 `compare` r2
     in  take k $ foldr (L.insertBy sortFunc) nearest $ kNearestNeighbors tree pos k topR
