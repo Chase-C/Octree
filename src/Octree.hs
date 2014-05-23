@@ -63,10 +63,10 @@ prettyPrint (Leaf cen l objs) = "Leaf {\n\tcenter: " ++ (show cen) ++ "\n\tlengt
 ---------------------------------------------------------
 
 getOctant :: Vec3D -> Vec3D -> Octant
-getOctant cen pos = toEnum $ (fromEnum right) + (2 * fromEnum top) + (4 * fromEnum front)
-    where front = vZ pos < vZ cen
-          top   = vY pos < vY cen
-          right = vX pos < vX cen
+getOctant (Vec3D (cx, cy, cz)) (Vec3D (px, py, pz)) = toEnum $ (fromEnum right) + (2 * fromEnum top) + (4 * fromEnum front)
+    where front = pz < cz
+          top   = py < cy
+          right = px < cx
 
 getSubtree :: Octree a -> Octant -> Octree a
 getSubtree (Node _ _ a b c d e f g h) octant =
@@ -164,32 +164,46 @@ inBounds tree pos rad = lX && lY && lZ && uX && uY && uZ
           uZ =  hl > z + rad
 
 -- Return a list of the subtrees intersecting with the given bounding sphere
+-- Note: The last subtree in the list is always the the one containing the point
 {-# INLINE intersectingSubtrees #-}
 intersectingSubtrees :: Octree a -> Vec3D -> Float -> [Octree a]
 intersectingSubtrees l@(Leaf _ _ _) _ _ = return l
-intersectingSubtrees node p@(Vec3D (px, py, pz)) rad = init $ map (getSubtree node) octants
+intersectingSubtrees node p@(Vec3D (px, py, pz)) rad = map (getSubtree node) octants
     where octant  = getOctant c p
-          octants = if rad > abs (pz - cz) then foldl (\zs o -> (zOppOctant o):o:zs) [] tmpY else tmpY
-          tmpY    = if rad > abs (py - cy) then foldl (\ys o -> (yOppOctant o):o:ys) [] tmpX else tmpX
+          octants = if rad > abs (pz - cz) then foldr (\o zs -> (zOppOctant o):o:zs) [] tmpY else tmpY
+          tmpY    = if rad > abs (py - cy) then foldr (\o ys -> (yOppOctant o):o:ys) [] tmpX else tmpX
           tmpX    = if rad > abs (px - cx) then (xOppOctant octant):[octant] else [octant]
           c@(Vec3D (cx, cy, cz)) = center node
 
 kNearestNeighbors :: Octree a -> Vec3D -> Int -> Float -> [(a, Float)]
-kNearestNeighbors (Leaf _ _ objs) pos k maxR = take k $ L.sortBy sortFunc $ filter filtFunc $ map radFunc objs
-    where sortFunc (_, r1) (_, r2) = r1 `compare` r2
-          filtFunc (_, rad)        = rad < maxR
-          radFunc  (obj, vec)      = (obj, vDist vec pos)
+kNearestNeighbors (Leaf _ _ objs) pos k maxR =
+    take k $ L.sortBy sortByDist $ filter filtFunc $ map (getObjDist pos) objs
+    where filtFunc (_, rad)        = rad < maxR
 kNearestNeighbors node pos k maxR
     | inBounds subtree pos topR && length nearest >= k = nearest
-    | otherwise = foldl (combineNeighbors pos k topR) nearest others
+    | otherwise = take k $ foldl combineNeighbors nearest $ getOtherNeighbors node pos k topR
     where subtree = getSubtree node (getOctant (center node) pos)
           nearest = kNearestNeighbors subtree pos k maxR
           topR    = if length nearest >= k then snd $ last nearest else maxR
-          --others  = L.deleteBy (\t1 t2 -> center t1 == center t2) subtree $ intersectingSubtrees node pos topR
-          others  = intersectingSubtrees node pos topR
 
-combineNeighbors :: Vec3D -> Int -> Float -> [(a, Float)] -> Octree a -> [(a, Float)]
-combineNeighbors pos k maxR nearest tree =
-    let topR = if length nearest >= k then snd $ last nearest else maxR
-        sortFunc (_, r1) (_, r2) = r1 `compare` r2
-    in  take k $ foldr (L.insertBy sortFunc) nearest $ kNearestNeighbors tree pos k topR
+{-# INLINE getOtherNeighbors #-}
+getOtherNeighbors :: Octree a -> Vec3D -> Int -> Float -> [[(a, Float)]]
+getOtherNeighbors tree pos k rad =
+    map (\t -> kNearestNeighbors t pos k rad) $ init $ intersectingSubtrees tree pos rad
+
+{-# INLINE combineNeighbors #-}
+combineNeighbors :: [(a, Float)] -> [(a, Float)] -> [(a, Float)]
+combineNeighbors xs [] = xs
+combineNeighbors [] ys = ys
+combineNeighbors (x@(_, rx):xs) (y@(_, ry):ys) =
+    if rx > ry
+      then y : combineNeighbors (x:xs) ys
+      else x : combineNeighbors xs (y:ys)
+
+{-# INLINE getObjDist #-}
+getObjDist :: Vec3D -> (a, Vec3D) -> (a, Float)
+getObjDist pos (obj, vec) = (obj, vDist vec pos)
+
+{-# INLINE sortByDist #-}
+sortByDist :: (a, Float) -> (a, Float) -> Ordering
+sortByDist (_, r1) (_, r2) = r1 `compare` r2
