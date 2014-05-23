@@ -18,8 +18,12 @@ vCross (Vec3D (x1, y1, z1)) (Vec3D (x2, y2, z2)) = Vec3D (s1, s2, s3)
           s2 = (z1 * x2) - (x1 * z2)
           s3 = (x1 * y2) - (y1 * x2)
 
-vDot :: Vec3D -> Vec3D -> Float
-vDot (Vec3D (x1, y1, z1)) (Vec3D (x2, y2, z2)) = (x1 * x2) + (y1 * y2) + (z1 * z2)
+vDot, vDist :: Vec3D -> Vec3D -> Float
+vDot  (Vec3D (x1, y1, z1)) (Vec3D (x2, y2, z2)) = (x1 * x2) + (y1 * y2) + (z1 * z2)
+vDist (Vec3D (x1, y1, z1)) (Vec3D (x2, y2, z2)) = sqrt $ (x * x) + (y * y) + (z * z)
+    where x = x2 - x1
+          y = y2 - y1
+          z = z2 - z1
 
 vLen, vSqLen :: Vec3D -> Float
 vSqLen (Vec3D (x, y, z)) = (x * x) + (y * y) + (z * z)
